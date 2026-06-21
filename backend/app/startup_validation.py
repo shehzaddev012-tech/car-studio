@@ -1,8 +1,10 @@
 """
-Strict startup validation for the dealership compositing pipeline.
+Startup validation for the dealership compositing pipeline.
 
-The application refuses to start unless Vertex AI is correctly configured
-and reachable. No segmentation fallbacks exist at runtime.
+Vertex AI is the primary segmentation provider. If the model is unavailable
+(404 / GCP project not enrolled), the pipeline falls back to rembg at runtime
+and the application starts with a warning. Auth failures and network errors
+are still fatal — they indicate a misconfiguration, not a missing GCP feature.
 """
 from __future__ import annotations
 
@@ -40,15 +42,20 @@ def _credentials_path() -> Path:
     return path
 
 
-def _verify_vertex_connectivity() -> float:
+class _VertexModelUnavailable(Exception):
+    """Sentinel: Vertex API is reachable but the model isn't in this GCP project."""
+
+
+def _verify_vertex_connectivity() -> float | None:
     """
-    Perform a live Vertex AI segmentation probe.
+    Probe Vertex AI.
 
     Returns:
-        Response time in milliseconds.
+        Response time in milliseconds, or None if the model is unavailable
+        (indicating rembg fallback will be used at runtime).
 
     Raises:
-        StartupValidationError on auth, network, timeout, or empty-mask failure.
+        StartupValidationError on auth, network, or timeout failures.
     """
     from google import genai  # type: ignore[import-untyped]
     from google.genai import types  # type: ignore[import-untyped]
@@ -95,19 +102,14 @@ def _verify_vertex_connectivity() -> float:
             "Check network access and Vertex AI API enablement."
         ) from exc
     except Exception as exc:
-        # Distinguish model-unavailable (404) from auth/network failures so the
-        # operator knows exactly what to fix in GCP rather than chasing credentials.
         err_str = str(exc)
         if "404" in err_str or "NOT_FOUND" in err_str or "unavailable" in err_str.lower():
-            raise StartupValidationError(
-                f"Vertex AI model '{settings.vertex_segmentation_model}' is not available in "
-                f"project '{settings.google_cloud_project}' / location '{settings.google_cloud_location}'. "
-                "Verify the model is enabled in your GCP project: "
-                "https://console.cloud.google.com/vertex-ai/model-garden. "
-                f"Original error: {exc}"
-            ) from exc
+            # Model not in this GCP project — NOT a fatal misconfiguration.
+            # rembg fallback will handle runtime segmentation.
+            raise _VertexModelUnavailable(str(exc)) from exc
+        # Auth / network / quota — operator must fix this before serving traffic.
         raise StartupValidationError(
-            f"Vertex AI connectivity probe failed: {exc}"
+            f"Vertex AI connectivity probe failed (auth or network error): {exc}"
         ) from exc
 
     elapsed_ms = (time.perf_counter() - started) * 1000.0
@@ -147,6 +149,8 @@ def validate_dealership_pipeline(*, context: str = "application") -> None:
     """
     Run all mandatory startup checks.
 
+    Vertex model unavailability (404) is a warning — rembg fallback activates.
+    Auth / network failures are fatal — the app refuses to start.
     Set SKIP_VERTEX_STARTUP_VALIDATION=1 only in automated tests.
     """
     if os.environ.get("SKIP_VERTEX_STARTUP_VALIDATION", "").lower() in ("1", "true", "yes"):
@@ -157,15 +161,36 @@ def validate_dealership_pipeline(*, context: str = "application") -> None:
         logger.warning("Startup validation skipped: AI_PROVIDER is not compositing")
         return
 
-    logger.info("Running strict dealership pipeline startup validation (%s)…", context)
+    logger.info("Running dealership pipeline startup validation (%s)…", context)
     creds = _credentials_path()
     logger.info("GCP credentials file verified: %s", creds)
 
-    response_ms = _verify_vertex_connectivity()
+    vertex_ms: float | None = None
+    try:
+        vertex_ms = _verify_vertex_connectivity()
+    except _VertexModelUnavailable as exc:
+        logger.warning(
+            "Vertex AI model '%s' is not available in project '%s' / location '%s'. "
+            "rembg (u2net) will be used as the segmentation provider at runtime. "
+            "To enable Vertex AI, visit: https://console.cloud.google.com/vertex-ai/model-garden. "
+            "Details: %s",
+            settings.vertex_segmentation_model,
+            settings.google_cloud_project,
+            settings.google_cloud_location,
+            exc,
+        )
+
     _verify_sam2_available()
 
-    logger.info(
-        "Dealership pipeline startup validation passed (%s): vertex_probe_ms=%.0f",
-        context,
-        response_ms,
-    )
+    if vertex_ms is not None:
+        logger.info(
+            "Pipeline startup validation passed (%s): provider=vertex-ai vertex_probe_ms=%.0f",
+            context,
+            vertex_ms,
+        )
+    else:
+        logger.info(
+            "Pipeline startup validation passed (%s): provider=rembg-fallback "
+            "(Vertex model unavailable — enable image-segmentation-001 in GCP to use primary provider)",
+            context,
+        )

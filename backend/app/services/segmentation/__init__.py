@@ -1,10 +1,12 @@
 """
-Strict dealership segmentation pipeline.
+Dealership segmentation pipeline.
 
-Vertex AI image-segmentation-001 is the ONLY segmentation provider.
-SAM2 refines the Vertex mask — it never replaces Vertex as primary segmentation.
+Primary:  Vertex AI image-segmentation-001 → SAM2 → merge → edge refine
+Fallback: rembg u2net (local, no API)      → SAM2 → edge refine
 
-No rembg, U2-Net, GrabCut, or silent fallbacks.
+The fallback activates ONLY when Vertex AI returns a model-unavailable error
+(404 / "unavailable"). Auth failures and network errors are still fatal.
+SAM2 refinement, mask merging, and edge refinement run identically in both paths.
 """
 from __future__ import annotations
 
@@ -22,53 +24,87 @@ from app.services.segmentation.mask_ops import (
     merge_and_select_mask,
     refine_mask_edges,
 )
+from app.services.segmentation.rembg_segment import RembgSegmentationError, segment_vehicle_rembg
 from app.services.segmentation.sam2_refine import SAM2RefinementError, refine_mask_sam2
 from app.services.segmentation.vertex import VertexSegmentationError, segment_vehicle_vertex
 
 logger = logging.getLogger(__name__)
 
 
-def _validate_mask_coverage(mask: np.ndarray) -> float:
+def _is_model_unavailable(exc: Exception) -> bool:
+    """Return True only for 404 / model-not-available errors — not auth or network."""
+    msg = str(exc)
+    return "404" in msg or "NOT_FOUND" in msg or "unavailable" in msg.lower()
+
+
+def _validate_mask_coverage(mask: np.ndarray, provider: str) -> float:
     coverage = mask_coverage(mask)
     if coverage < settings.mask_min_coverage:
         raise VertexSegmentationError(
-            f"Mask coverage {coverage:.1%} is below minimum {settings.mask_min_coverage:.1%}. "
-            "No vehicle detected reliably in this image."
+            f"[{provider}] Mask coverage {coverage:.1%} is below minimum "
+            f"{settings.mask_min_coverage:.1%}. No vehicle detected reliably."
         )
     if coverage > settings.mask_max_coverage:
         raise VertexSegmentationError(
-            f"Mask coverage {coverage:.1%} exceeds maximum {settings.mask_max_coverage:.1%}. "
-            "Segmentation may include too much background."
+            f"[{provider}] Mask coverage {coverage:.1%} exceeds maximum "
+            f"{settings.mask_max_coverage:.1%}. Segmentation may include too much background."
         )
     return coverage
 
 
 def segment_vehicle(image: Image.Image) -> Tuple[Image.Image, Image.Image, dict]:
     """
-    Strict pipeline: Vertex AI → SAM2 → merge → edge refine.
+    Primary pipeline:  Vertex AI → SAM2 → merge → edge refine.
+    Fallback pipeline: rembg      → SAM2 → edge refine.
 
-    Raises VertexSegmentationError or SAM2RefinementError on any failure.
+    The fallback is used transparently when the Vertex model is unavailable.
+    Raises VertexSegmentationError, RembgSegmentationError, or SAM2RefinementError on failure.
     """
     rgb = np.array(image.convert("RGB"))
 
-    # ── Step 1: Vertex AI (sole segmentation provider) ────────────────────────
-    vertex_mask, vertex_conf, vertex_ms = segment_vehicle_vertex(image)
+    # ── Step 1: Initial segmentation ──────────────────────────────────────────
+    using_fallback = False
+    primary_mask: np.ndarray
+    primary_conf: float
+    primary_ms: float
 
-    # ── Step 2: SAM2 refinement (required) ────────────────────────────────────
     try:
-        sam2_mask, sam2_conf = refine_mask_sam2(image, vertex_mask)
+        primary_mask, primary_conf, primary_ms = segment_vehicle_vertex(image)
+        primary_source = "vertex"
+    except VertexSegmentationError as exc:
+        if not _is_model_unavailable(exc):
+            raise  # auth / network failure — still fatal
+
+        logger.warning(
+            "Vertex AI model unavailable (%s) — switching to rembg fallback for this job",
+            exc,
+        )
+        using_fallback = True
+        try:
+            primary_mask, primary_conf, primary_ms = segment_vehicle_rembg(image)
+            primary_source = "rembg"
+        except RembgSegmentationError as rembg_exc:
+            raise RembgSegmentationError(
+                f"Both Vertex AI and rembg fallback failed. "
+                f"Vertex: {exc}. rembg: {rembg_exc}"
+            ) from rembg_exc
+
+    # ── Step 2: SAM2 refinement (runs on whichever mask we have) ──────────────
+    try:
+        sam2_mask, sam2_conf = refine_mask_sam2(image, primary_mask)
     except SAM2RefinementError as exc:
         logger.error(
-            "SAM2 refinement failed after Vertex success: confidence=%.3f response_time_ms=%.0f reason=%s",
-            vertex_conf,
-            vertex_ms,
+            "SAM2 refinement failed after %s: confidence=%.3f ms=%.0f reason=%s",
+            primary_source,
+            primary_conf,
+            primary_ms,
             exc,
         )
         raise
 
-    # ── Step 3: Merge + select highest-confidence mask ──────────────────────────
+    # ── Step 3: Merge + select best mask ──────────────────────────────────────
     candidates = [
-        MaskCandidate(mask=vertex_mask, confidence=vertex_conf, source="vertex"),
+        MaskCandidate(mask=primary_mask, confidence=primary_conf, source=primary_source),
         MaskCandidate(mask=sam2_mask, confidence=sam2_conf, source="sam2"),
     ]
     merged, selected_source, merge_score = merge_and_select_mask(
@@ -77,34 +113,37 @@ def segment_vehicle(image: Image.Image) -> Tuple[Image.Image, Image.Image, dict]
         max_coverage=settings.mask_max_coverage,
     )
 
-    # ── Step 4: Edge refinement + anti-aliasing ─────────────────────────────────
+    # ── Step 4: Edge refinement + anti-aliasing ────────────────────────────────
     refined = refine_mask_edges(merged, rgb)
-    coverage = _validate_mask_coverage(refined)
+    provider_label = "rembg+sam2" if using_fallback else "vertex-ai"
+    coverage = _validate_mask_coverage(refined, provider_label)
 
     car_rgba, mask_pil = extract_car_rgba(image, refined)
     metadata = {
-        "segmentation_provider": "vertex-ai",
-        "primary_source": "vertex",
+        "segmentation_provider": provider_label,
+        "primary_source": primary_source,
         "selected_source": selected_source,
-        "vertex_confidence": vertex_conf,
-        "vertex_response_time_ms": vertex_ms,
+        "primary_confidence": primary_conf,
+        "primary_response_time_ms": primary_ms,
         "sam2_confidence": sam2_conf,
         "merge_score": merge_score,
         "mask_coverage": coverage,
+        "vertex_fallback_active": using_fallback,
         # Mask stages for vehicle-preservation validation (not serialised to client)
-        "vertex_mask": vertex_mask,
+        "vertex_mask": primary_mask,
         "sam2_mask": sam2_mask,
         "merged_mask": merged,
         "final_mask": refined,
-        "bootstrap_mask": vertex_mask,
+        "bootstrap_mask": primary_mask,
     }
 
     logger.info(
-        "segment_vehicle complete: provider=vertex-ai confidence=%.3f coverage=%.1f%% "
-        "vertex_ms=%.0f sam2_conf=%.3f selected=%s",
-        vertex_conf,
+        "segment_vehicle complete: provider=%s confidence=%.3f coverage=%.1f%% "
+        "primary_ms=%.0f sam2_conf=%.3f selected=%s",
+        provider_label,
+        primary_conf,
         coverage * 100,
-        vertex_ms,
+        primary_ms,
         sam2_conf,
         selected_source,
     )
