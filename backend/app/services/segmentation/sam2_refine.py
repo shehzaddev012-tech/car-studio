@@ -20,16 +20,22 @@ class SAM2RefinementError(RuntimeError):
 
 
 def _resolve_sam2_config() -> str:
+    """Return the config name relative to the sam2 package (what Hydra expects)."""
     import sam2  # type: ignore[import-untyped]
     from pathlib import Path
 
     base = Path(sam2.__file__).resolve().parent
-    candidate = base / settings.sam2_model_config
-    if candidate.is_file():
-        return str(candidate)
-    alt = base / "configs" / "sam2.1" / "sam2.1_hiera_b+.yaml"
-    if alt.is_file():
-        return str(alt)
+
+    candidates = [
+        settings.sam2_model_config,
+        "configs/sam2.1/sam2.1_hiera_b+.yaml",
+        "configs/sam2.1/sam2.1_hiera_b+",
+    ]
+    for rel in candidates:
+        # Strip .yaml for Hydra lookup but verify the file actually exists
+        rel_with_yaml = rel if rel.endswith(".yaml") else rel + ".yaml"
+        if (base / rel_with_yaml).is_file():
+            return rel_with_yaml  # relative to sam2 package — Hydra resolves it
     raise SAM2RefinementError(f"SAM2 config not found: {settings.sam2_model_config}")
 
 
