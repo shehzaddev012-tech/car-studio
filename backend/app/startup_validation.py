@@ -103,8 +103,15 @@ def _verify_vertex_connectivity() -> float | None:
         ) from exc
     except Exception as exc:
         err_str = str(exc)
-        if "404" in err_str or "NOT_FOUND" in err_str or "unavailable" in err_str.lower():
-            # Model not in this GCP project — NOT a fatal misconfiguration.
+        if (
+            "404" in err_str
+            or "NOT_FOUND" in err_str
+            or "unavailable" in err_str.lower()
+            or "429" in err_str
+            or "RESOURCE_EXHAUSTED" in err_str
+            or "quota" in err_str.lower()
+        ):
+            # Model unavailable or quota exhausted — NOT a fatal misconfiguration.
             # rembg fallback will handle runtime segmentation.
             raise _VertexModelUnavailable(str(exc)) from exc
         # Auth / network / quota — operator must fix this before serving traffic.

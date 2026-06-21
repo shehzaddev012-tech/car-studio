@@ -32,9 +32,16 @@ logger = logging.getLogger(__name__)
 
 
 def _is_model_unavailable(exc: Exception) -> bool:
-    """Return True only for 404 / model-not-available errors — not auth or network."""
+    """Return True for 404/unavailable and 429 quota errors — both use rembg fallback."""
     msg = str(exc)
-    return "404" in msg or "NOT_FOUND" in msg or "unavailable" in msg.lower()
+    return (
+        "404" in msg
+        or "NOT_FOUND" in msg
+        or "unavailable" in msg.lower()
+        or "429" in msg
+        or "RESOURCE_EXHAUSTED" in msg
+        or "quota" in msg.lower()
+    )
 
 
 def _validate_mask_coverage(mask: np.ndarray, provider: str) -> float:
