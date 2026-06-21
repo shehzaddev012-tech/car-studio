@@ -125,6 +125,10 @@ def segment_vehicle(image: Image.Image) -> Tuple[Image.Image, Image.Image, dict]
         "selected_source": selected_source,
         "primary_confidence": primary_conf,
         "primary_response_time_ms": primary_ms,
+        # Keep vertex_confidence / vertex_response_time_ms as stable keys so
+        # ai_background.py and vehicle_preservation code don't need changes.
+        "vertex_confidence": primary_conf,
+        "vertex_response_time_ms": primary_ms,
         "sam2_confidence": sam2_conf,
         "merge_score": merge_score,
         "mask_coverage": coverage,
