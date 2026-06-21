@@ -16,7 +16,8 @@ from sqlalchemy.orm import sessionmaker
 # ── Patch settings before any app import ─────────────────────────────────────
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")  # isolated test DB
-os.environ.setdefault("MOCK_AI", "true")
+os.environ.setdefault("SKIP_VERTEX_STARTUP_VALIDATION", "true")
+os.environ.setdefault("LPIPS_ENABLED", "false")
 
 from app.db.database import Base, get_db  # noqa: E402
 from app.main import create_app  # noqa: E402

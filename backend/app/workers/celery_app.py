@@ -13,7 +13,10 @@ Design decisions:
 from __future__ import annotations
 
 from celery import Celery
+from celery.signals import worker_process_init
+
 from app.config import settings
+from app.startup_validation import StartupValidationError, validate_dealership_pipeline
 
 celery_app = Celery(
     "car_studio",
@@ -38,3 +41,12 @@ celery_app.conf.update(
     # Keep results for 24 h (used for Celery result backend; job status is in the DB)
     result_expires=86_400,
 )
+
+
+@worker_process_init.connect
+def _validate_worker_on_start(**_kwargs: object) -> None:
+    """Each worker process must pass the same strict validation as the API."""
+    try:
+        validate_dealership_pipeline(context="celery-worker")
+    except StartupValidationError as exc:
+        raise RuntimeError(f"Worker startup validation failed: {exc}") from exc

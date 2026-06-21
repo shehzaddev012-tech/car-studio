@@ -122,7 +122,13 @@ def process_job(self: Task, job_id: str) -> dict:
         result_url = f"/api/jobs/{job_id}/download"
         _publish(
             job_id, "completed", 100,
-            f"Done (SSIM {result.ssim_score:.3f})" if result.ssim_score else "Done",
+            (
+                f"Done (SSIM {result.ssim_score:.3f}, LPIPS {result.lpips_score:.3f})"
+                if result.ssim_score and result.lpips_score
+                else f"Done (SSIM {result.ssim_score:.3f})"
+                if result.ssim_score
+                else "Done"
+            ),
             resultImageUrl=result_url,
         )
         logger.info("[%s] Pipeline complete. SSIM=%.4f", job_id, result.ssim_score or 0)

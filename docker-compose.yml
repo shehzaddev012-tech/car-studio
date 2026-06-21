@@ -37,12 +37,21 @@ services:
       - DATABASE_URL=sqlite:////data/car_studio.db
       - STORAGE_BACKEND=local
       - STORAGE_PATH=/data/storage
-      - MOCK_AI=${MOCK_AI:-false}
       - DEBUG=${DEBUG:-false}
+      - AI_PROVIDER=${AI_PROVIDER:-compositing}
+      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-}
+      - GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION:-us-central1}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-}
+      - VERTEX_MIN_CONFIDENCE=${VERTEX_MIN_CONFIDENCE:-0.55}
+      - VERTEX_REQUEST_TIMEOUT_SECONDS=${VERTEX_REQUEST_TIMEOUT_SECONDS:-60}
+      - LPIPS_ENABLED=${LPIPS_ENABLED:-true}
+      - QC_SSIM_THRESHOLD=${QC_SSIM_THRESHOLD:-0.85}
+      - QC_LPIPS_THRESHOLD=${QC_LPIPS_THRESHOLD:-0.08}
+      - JOB_TIMEOUT_SECONDS=${JOB_TIMEOUT_SECONDS:-600}
       - 'CORS_ORIGINS=["http://localhost:5173","http://localhost:3000"]'
-      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
     volumes:
       - ./backend/app:/app/app   # live-mount source — no rebuild needed for Python changes
+      - ./backend/wow-car-496713-8ffc25ef4315.json:/secrets/gcp-key.json:ro
       - app_data:/data
     depends_on:
       redis:
@@ -66,10 +75,19 @@ services:
       - DATABASE_URL=sqlite:////data/car_studio.db
       - STORAGE_BACKEND=local
       - STORAGE_PATH=/data/storage
-      - MOCK_AI=${MOCK_AI:-false}
-      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
+      - AI_PROVIDER=${AI_PROVIDER:-compositing}
+      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-}
+      - GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION:-us-central1}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-}
+      - VERTEX_MIN_CONFIDENCE=${VERTEX_MIN_CONFIDENCE:-0.55}
+      - VERTEX_REQUEST_TIMEOUT_SECONDS=${VERTEX_REQUEST_TIMEOUT_SECONDS:-60}
+      - LPIPS_ENABLED=${LPIPS_ENABLED:-true}
+      - QC_SSIM_THRESHOLD=${QC_SSIM_THRESHOLD:-0.85}
+      - QC_LPIPS_THRESHOLD=${QC_LPIPS_THRESHOLD:-0.08}
+      - JOB_TIMEOUT_SECONDS=${JOB_TIMEOUT_SECONDS:-600}
     volumes:
       - ./backend/app:/app/app   # live-mount source
+      - ./backend/wow-car-496713-8ffc25ef4315.json:/secrets/gcp-key.json:ro
       - app_data:/data
     depends_on:
       redis:

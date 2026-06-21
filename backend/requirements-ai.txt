@@ -1,0 +1,4 @@
+# SAM2 + LPIPS deps — PyTorch CPU wheel installed in Dockerfile before this file
+git+https://github.com/facebookresearch/sam2.git
+lpips==0.1.4
+huggingface-hub>=0.26.0

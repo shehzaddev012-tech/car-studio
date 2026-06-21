@@ -3,6 +3,10 @@
 .env.*
 !.env.example
 
+# GCP service account keys — never commit
+backend/wow-car-*.json
+backend/gcp-key.json
+
 # ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
 *.pyc
