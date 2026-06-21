@@ -62,6 +62,7 @@ def _verify_vertex_connectivity() -> float:
         vertexai=True,
         project=settings.google_cloud_project,
         location=settings.google_cloud_location,
+        http_options={"api_version": "v1"},
     )
 
     probe = Image.new("RGB", (64, 64), color=(128, 128, 128))
@@ -94,6 +95,17 @@ def _verify_vertex_connectivity() -> float:
             "Check network access and Vertex AI API enablement."
         ) from exc
     except Exception as exc:
+        # Distinguish model-unavailable (404) from auth/network failures so the
+        # operator knows exactly what to fix in GCP rather than chasing credentials.
+        err_str = str(exc)
+        if "404" in err_str or "NOT_FOUND" in err_str or "unavailable" in err_str.lower():
+            raise StartupValidationError(
+                f"Vertex AI model '{settings.vertex_segmentation_model}' is not available in "
+                f"project '{settings.google_cloud_project}' / location '{settings.google_cloud_location}'. "
+                "Verify the model is enabled in your GCP project: "
+                "https://console.cloud.google.com/vertex-ai/model-garden. "
+                f"Original error: {exc}"
+            ) from exc
         raise StartupValidationError(
             f"Vertex AI connectivity probe failed: {exc}"
         ) from exc

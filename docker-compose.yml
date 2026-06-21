@@ -48,6 +48,7 @@ services:
       - QC_SSIM_THRESHOLD=${QC_SSIM_THRESHOLD:-0.85}
       - QC_LPIPS_THRESHOLD=${QC_LPIPS_THRESHOLD:-0.08}
       - JOB_TIMEOUT_SECONDS=${JOB_TIMEOUT_SECONDS:-600}
+      - SKIP_VERTEX_STARTUP_VALIDATION=${SKIP_VERTEX_STARTUP_VALIDATION:-}
       - 'CORS_ORIGINS=["http://localhost:5173","http://localhost:3000"]'
     volumes:
       - ./backend/app:/app/app   # live-mount source — no rebuild needed for Python changes

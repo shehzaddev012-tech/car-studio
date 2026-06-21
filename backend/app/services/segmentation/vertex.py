@@ -45,6 +45,7 @@ def _get_genai_client():
             vertexai=True,
             project=settings.google_cloud_project,
             location=settings.google_cloud_location,
+            http_options={"api_version": "v1"},
         )
     return _genai_client
 
