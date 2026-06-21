@@ -1,0 +1,100 @@
+# ── Car Studio — full stack
+# Services: Redis, FastAPI backend, Celery worker, React frontend (dev)
+#
+# Quick start:
+#   docker compose up --build
+#
+# Production note: replace the frontend service with a static build
+# served via nginx, and set CORS origins to your production domain.
+
+services:
+
+  # ── Infrastructure ───────────────────────────────────────────────────────────
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --save "" --appendonly no  # in-memory only; no disk persistence
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── Backend API (FastAPI + Uvicorn) ──────────────────────────────────────────
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=sqlite:////data/car_studio.db
+      - STORAGE_BACKEND=local
+      - STORAGE_PATH=/data/storage
+      - MOCK_AI=${MOCK_AI:-false}
+      - DEBUG=${DEBUG:-false}
+      - 'CORS_ORIGINS=["http://localhost:5173","http://localhost:3000"]'
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
+    volumes:
+      - ./backend/app:/app/app   # live-mount source — no rebuild needed for Python changes
+      - app_data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Celery Worker ─────────────────────────────────────────────────────────────
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: celery -A celery_worker.celery_app worker --loglevel=info --concurrency=1
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=sqlite:////data/car_studio.db
+      - STORAGE_BACKEND=local
+      - STORAGE_PATH=/data/storage
+      - MOCK_AI=${MOCK_AI:-false}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
+    volumes:
+      - ./backend/app:/app/app   # live-mount source
+      - app_data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+
+  # ── Frontend (Vite dev server) ────────────────────────────────────────────────
+  # For production: run `npm run build` and serve ./dist with nginx
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5173:5173"
+    environment:
+      # Used by vite.config.ts (Node process) as the proxy target.
+      # Must use the Docker service name — 'localhost' inside this container is not the API.
+      - VITE_API_INTERNAL_BASE=http://api:8000
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    depends_on:
+      - api
+
+volumes:
+  app_data:
