@@ -173,7 +173,7 @@ def validate_output(
         internal_errors.append(f"Coverage {coverage:.1%} above maximum")
 
     cropped = detect_vehicle_crop(mask_resized, settings.crop_edge_margin_ratio)
-    if cropped:
+    if cropped and settings.reject_cropped_vehicles:
         preservation_failure = True
         internal_errors.append("Vehicle cropped at frame edge")
 

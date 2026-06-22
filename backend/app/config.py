@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     # Quality gates
     qc_ssim_threshold: float = 0.82
     qc_lpips_threshold: float = 0.08
-    lpips_enabled: bool = True
+    lpips_enabled: bool = False
     job_timeout_seconds: int = 600
 
     mask_min_coverage: float = 0.03

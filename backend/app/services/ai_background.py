@@ -160,7 +160,7 @@ class StudioBackgroundService(AIBackgroundService):
                 composite,
                 mask,
                 primary_mask=seg_meta.get("vertex_mask"),
-                vertex_confidence=seg_meta.get("vertex_confidence"),
+                vertex_confidence=None if provider.startswith("rembg") else seg_meta.get("vertex_confidence"),
             )
 
             quality_metadata = _public_metadata(
