@@ -174,10 +174,7 @@ def _edge_loss_ratio(vertex: np.ndarray, final: np.ndarray) -> tuple[float, bool
     total_lost = float(lost.sum() / max(vertex_fg.sum(), 1))
     boundary_lost_ratio = float(boundary_lost.sum() / max(boundary_band.sum(), 1))
 
-    aggressive = (
-        total_lost > settings.preservation_max_edge_loss_ratio
-        or boundary_lost_ratio > settings.preservation_max_boundary_loss_ratio
-    )
+    aggressive = total_lost > settings.preservation_max_edge_loss_ratio
     return total_lost, aggressive
 
 
