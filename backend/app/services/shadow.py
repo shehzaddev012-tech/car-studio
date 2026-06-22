@@ -79,7 +79,7 @@ def generate_shadow(mask: Image.Image, width: int, height: int) -> Image.Image:
     yy = np.arange(height, dtype=np.float32)
     dist_from_contact = np.clip(yy - paste_y, 0, height) / max(height - paste_y, 1)
     falloff = 1.0 - dist_from_contact * 0.55
-    combined *= falloff[np.newaxis, :]
+    combined *= falloff[:, np.newaxis]
 
     # Light-direction bias: shadow slightly offset toward camera-right
     shift = max(int(car_w * 0.01), 2)

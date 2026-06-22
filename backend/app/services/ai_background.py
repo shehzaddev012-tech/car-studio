@@ -111,7 +111,7 @@ class StudioBackgroundService(AIBackgroundService):
             if not preservation.passed:
                 logger.error(
                     "Job rejected (preservation, pre-composite): vertex_conf=%.3f "
-                    "sam2_conf=%.3f edge_loss=%.1%% stage=%s zones=%s reason=%s",
+                    "sam2_conf=%.3f edge_loss=%.1f%% stage=%s zones=%s reason=%s",
                     seg_meta.get("vertex_confidence", 0),
                     seg_meta.get("sam2_confidence", 0),
                     preservation.edge_loss_ratio * 100,

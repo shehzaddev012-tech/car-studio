@@ -304,7 +304,7 @@ def validate_vehicle_preservation(
     else:
         logger.error(
             "vehicle preservation FAILED: vertex_conf=%.3f sam2_conf=%.3f "
-            "edge_loss=%.1%% zones=%s reason=%s",
+            "edge_loss=%.1f%% zones=%s reason=%s",
             vertex_confidence,
             sam2_confidence,
             edge_loss * 100,
