@@ -123,6 +123,7 @@ class StudioBackgroundService(AIBackgroundService):
                     final_mask=seg_meta["final_mask"],
                     vertex_confidence=float(seg_meta["vertex_confidence"]),
                     sam2_confidence=float(seg_meta["sam2_confidence"]),
+                    provider=provider,
                 )
 
             if not preservation.passed:
