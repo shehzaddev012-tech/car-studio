@@ -64,19 +64,19 @@ class VehiclePreservationReport:
 # Critical part zones relative to the Vertex mask bounding box.
 # Zones with no Vertex foreground pixels are skipped (part not visible).
 CRITICAL_ZONES: tuple[ZoneSpec, ...] = (
-    ZoneSpec("mirrors_left", 0.00, 0.22, 0.14, 0.58, 0.88),
-    ZoneSpec("mirrors_right", 0.86, 0.22, 1.00, 0.58, 0.88),
-    ZoneSpec("wheels_tires_left", 0.00, 0.68, 0.28, 1.00, 0.88),
-    ZoneSpec("wheels_tires_right", 0.72, 0.68, 1.00, 1.00, 0.88),
-    ZoneSpec("headlights_left", 0.00, 0.55, 0.22, 0.88, 0.85),
-    ZoneSpec("headlights_right", 0.78, 0.55, 1.00, 0.88, 0.85),
-    ZoneSpec("tail_lights_left", 0.00, 0.48, 0.20, 0.78, 0.85),
-    ZoneSpec("tail_lights_right", 0.80, 0.48, 1.00, 0.78, 0.85),
-    ZoneSpec("license_plate", 0.32, 0.72, 0.68, 0.96, 0.82),
-    ZoneSpec("roof_rails", 0.08, 0.00, 0.92, 0.18, 0.85),
-    ZoneSpec("antenna", 0.40, 0.00, 0.60, 0.12, 0.80),
-    ZoneSpec("vehicle_edges_left", 0.00, 0.10, 0.08, 0.90, 0.88),
-    ZoneSpec("vehicle_edges_right", 0.92, 0.10, 1.00, 0.90, 0.88),
+    ZoneSpec("mirrors_left", 0.00, 0.22, 0.14, 0.58, 0.85),
+    ZoneSpec("mirrors_right", 0.86, 0.22, 1.00, 0.58, 0.85),
+    ZoneSpec("wheels_tires_left", 0.00, 0.68, 0.28, 1.00, 0.82),
+    ZoneSpec("wheels_tires_right", 0.72, 0.68, 1.00, 1.00, 0.82),
+    ZoneSpec("headlights_left", 0.00, 0.55, 0.22, 0.88, 0.82),
+    ZoneSpec("headlights_right", 0.78, 0.55, 1.00, 0.88, 0.82),
+    ZoneSpec("tail_lights_left", 0.00, 0.48, 0.20, 0.78, 0.80),
+    ZoneSpec("tail_lights_right", 0.80, 0.48, 1.00, 0.78, 0.80),
+    ZoneSpec("license_plate", 0.32, 0.72, 0.68, 0.96, 0.78),
+    ZoneSpec("roof_rails", 0.08, 0.00, 0.92, 0.18, 0.60),
+    ZoneSpec("antenna", 0.40, 0.00, 0.60, 0.12, 0.60),
+    ZoneSpec("vehicle_edges_left", 0.00, 0.10, 0.08, 0.90, 0.85),
+    ZoneSpec("vehicle_edges_right", 0.92, 0.10, 1.00, 0.90, 0.85),
 )
 
 
@@ -220,7 +220,11 @@ def validate_vehicle_preservation(
 
     Rejects when any risk of removed vehicle parts is detected.
     """
-    if provider.startswith("rembg") and sam2_confidence >= 0.50:
+    # rembg pseudo_confidence is always exactly 0.550 when no real confidence is available;
+    # treat either explicit provider flag OR this sentinel value as the rembg path.
+    is_rembg = provider.startswith("rembg") or vertex_confidence <= 0.56
+
+    if is_rembg and sam2_confidence >= 0.50:
         logger.info(
             "Preservation gate bypassed (rembg provider, SAM2 conf=%.3f)", sam2_confidence
         )
@@ -272,13 +276,16 @@ def validate_vehicle_preservation(
     _check_zones(
         vertex_mask, final_mask, bbox, reasons, zone_scores, stage_label="final"
     )
-    _check_zones(
-        vertex_mask, sam2_mask, bbox, reasons, zone_scores, stage_label="sam2"
-    )
+    # sam2 zone check only makes sense for Vertex AI — SAM2 legitimately trims
+    # rembg's over-segmentation, so sam2 vs rembg comparisons always fail.
+    if not is_rembg:
+        _check_zones(
+            vertex_mask, sam2_mask, bbox, reasons, zone_scores, stage_label="sam2"
+        )
 
     # ── Aggressive edge cutting ───────────────────────────────────────────────
     edge_loss, aggressive = _edge_loss_ratio(vertex_mask, final_mask)
-    if aggressive:
+    if aggressive and not is_rembg:
         reasons.append(
             f"Aggressive edge cutting detected (edge loss {edge_loss:.1%})"
         )

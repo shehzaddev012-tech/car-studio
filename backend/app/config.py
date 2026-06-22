@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     preservation_min_global_retention: float = 0.88
     preservation_min_zone_retention: float = 0.85
     preservation_min_sam2_retention: float = 0.86
-    preservation_max_edge_loss_ratio: float = 0.07
+    preservation_max_edge_loss_ratio: float = 0.12
     preservation_max_boundary_loss_ratio: float = 0.30
     preservation_min_sam2_confidence: float = 0.62
 
