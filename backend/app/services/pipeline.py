@@ -47,16 +47,12 @@ def glass_cleanup_stub(
     mask: Image.Image | None = None,
 ) -> Image.Image:
     """
-    Windscreen / glass cleanup for automotive studio composites.
-
-    Detects dark interior-visible areas within the upper-centre of the car
-    silhouette (typical windscreen zone) and blends them with a light studio
-    grey, simulating the clean sky/studio-light reflection seen in professional
-    dealership photography.
-
-    The effect is deliberately subtle (~30 % blend) so paint, wheels, and
-    other dark car details are not affected.
+    Glass cleanup is DISABLED — car pixels must be 100% unchanged per client requirement.
+    Returns the composite image unmodified.
     """
+    return image
+
+    # ── disabled code below — kept for reference ────────────────────────────
     if mask is None:
         return image
 
