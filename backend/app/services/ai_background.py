@@ -190,7 +190,7 @@ class StudioBackgroundService(AIBackgroundService):
 
             cb(95, "Encoding result")
             out_buf = io.BytesIO()
-            composite.save(out_buf, format="JPEG", quality=96, subsampling=0)
+            composite.save(out_buf, format="JPEG", quality=99, subsampling=0)
 
             logger.info(
                 "Job complete: vertex_conf=%.3f vertex_ms=%.0f coverage=%.1f%% "

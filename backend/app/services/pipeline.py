@@ -93,8 +93,9 @@ def glass_cleanup_stub(
         wx1 = int(x0 + bw * 0.90)
         wind_zone[y0:wy1, wx0:wx1] = True
 
-        # Glass candidates: very dark (< 22 % luma) within car mask & windscreen zone
-        glass_px = (luminance < 0.22) & in_car_mask & wind_zone
+        # Glass candidates: extremely dark (< 12 % luma) within car mask & windscreen zone.
+        # Low threshold ensures only true glass/interior is touched, not dark car paint.
+        glass_px = (luminance < 0.12) & in_car_mask & wind_zone
 
         if not glass_px.any():
             return image
@@ -102,7 +103,7 @@ def glass_cleanup_stub(
         # Studio-grey target (matches the light grey studio background)
         studio_grey = np.array([0.91, 0.91, 0.92], dtype=np.float32)
 
-        blend = 0.30  # subtle — keep car detail visible
+        blend = 0.20  # very subtle — preserve car detail as much as possible
         result = composite_arr.copy()
         result[glass_px] = (
             composite_arr[glass_px] * (1.0 - blend) + studio_grey * blend
