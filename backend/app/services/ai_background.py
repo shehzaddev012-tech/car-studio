@@ -153,7 +153,7 @@ class StudioBackgroundService(AIBackgroundService):
             composite = composite_layers(background, shadow, car_rgba)
 
             cb(78, "Finalising")
-            composite = glass_cleanup_stub(composite, car_rgba)
+            composite = glass_cleanup_stub(composite, car_rgba, mask)
 
             cb(88, "Running quality validation")
             report = validate_output(

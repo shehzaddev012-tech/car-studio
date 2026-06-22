@@ -69,7 +69,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     restart: unless-stopped
-    command: celery -A celery_worker.celery_app worker --loglevel=info --concurrency=1
+    command: celery -A celery_worker.celery_app worker --loglevel=info --concurrency=2
     environment:
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=sqlite:////data/car_studio.db
