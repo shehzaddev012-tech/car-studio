@@ -42,9 +42,14 @@ def generate_studio_background(width: int, height: int) -> Image.Image:
             t = (row - (floor_line + curve_half)) / max(height - floor_line - curve_half, 1)
             bg[row, :, :] = floor_near * (1 - t) + floor_far * t
 
-    # Horizontal centre lift — very subtle, mimics even studio lighting
+    # Horizontal centre lift — simulates overhead studio softbox (brighter at centre)
     xx = np.linspace(-1.0, 1.0, width, dtype=np.float32)
-    horizontal_lift = 1.0 + 0.018 * (1.0 - xx ** 2)
+    horizontal_lift = 1.0 + 0.032 * np.exp(-1.8 * xx ** 2)
     bg *= horizontal_lift[np.newaxis, :, np.newaxis]
+
+    # Very subtle vertical vignette — slightly darker at extreme top/bottom edges
+    yy = np.linspace(-1.0, 1.0, height, dtype=np.float32)
+    vertical_lift = 1.0 - 0.025 * yy ** 4
+    bg *= vertical_lift[:, np.newaxis, np.newaxis]
 
     return Image.fromarray(np.clip(bg, 0, 255).astype(np.uint8), "RGB")

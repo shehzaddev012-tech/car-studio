@@ -128,6 +128,7 @@ def segment_vehicle(image: Image.Image) -> Tuple[Image.Image, Image.Image, dict]
     car_rgba, mask_pil = extract_car_rgba(image, refined)
     metadata = {
         "segmentation_provider": provider_label,
+        "provider": provider_label,   # alias used by ai_background.py provider checks
         "primary_source": primary_source,
         "selected_source": selected_source,
         "primary_confidence": primary_conf,

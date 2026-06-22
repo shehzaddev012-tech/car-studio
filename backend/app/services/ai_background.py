@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from PIL import Image
+from PIL import Image, ImageFilter
 
 from app.config import settings
 from app.services.pipeline import (
@@ -91,9 +91,23 @@ class StudioBackgroundService(AIBackgroundService):
 
         try:
             cb(5, "Loading image")
-            original = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+            _raw = Image.open(io.BytesIO(image_bytes))
+            if _raw.mode in ("RGBA", "LA"):
+                # Transparent PNG: paste onto white so rembg segments cleanly
+                # and the comparison slider shows a sensible original
+                _bg = Image.new("RGB", _raw.size, (255, 255, 255))
+                _alpha = _raw.split()[-1]
+                _bg.paste(_raw.convert("RGB"), mask=_alpha)
+                original = _bg
+            elif _raw.mode == "P":
+                original = _raw.convert("RGBA")
+                _bg = Image.new("RGB", original.size, (255, 255, 255))
+                _bg.paste(original.convert("RGB"), mask=original.split()[-1])
+                original = _bg
+            else:
+                original = _raw.convert("RGB")
             w, h = original.size
-            logger.info("Processing image %dx%d", w, h)
+            logger.info("Processing image %dx%d mode=%s", w, h, _raw.mode)
 
             cb(10, "Vertex AI image-segmentation-001")
             car_rgba, mask, seg_meta = segment_vehicle(original)
@@ -154,6 +168,10 @@ class StudioBackgroundService(AIBackgroundService):
 
             cb(78, "Finalising")
             composite = glass_cleanup_stub(composite, car_rgba, mask)
+            # Subtle unsharp mask — restores crispness lost during alpha compositing
+            composite = composite.filter(
+                ImageFilter.UnsharpMask(radius=0.8, percent=70, threshold=2)
+            )
 
             cb(88, "Running quality validation")
             report = validate_output(
