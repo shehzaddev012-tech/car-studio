@@ -27,6 +27,7 @@ from app.services.segmentation.sam2_refine import SAM2RefinementError
 from app.services.segmentation.vertex import VertexSegmentationError
 from app.services.vehicle_preservation import (
     REJECTION_MESSAGE,
+    VehiclePreservationReport,
     preservation_failure_result,
     validate_vehicle_preservation,
 )
@@ -99,14 +100,30 @@ class StudioBackgroundService(AIBackgroundService):
 
             # ── Vehicle preservation gate (before any output generation) ────────
             cb(32, "Validating vehicle preservation")
-            preservation = validate_vehicle_preservation(
-                vertex_mask=seg_meta["vertex_mask"],
-                sam2_mask=seg_meta["sam2_mask"],
-                merged_mask=seg_meta["merged_mask"],
-                final_mask=seg_meta["final_mask"],
-                vertex_confidence=float(seg_meta["vertex_confidence"]),
-                sam2_confidence=float(seg_meta["sam2_confidence"]),
-            )
+            provider = seg_meta.get("provider", "vertex+sam2")
+            if provider.startswith("rembg"):
+                # rembg mask is the reference — comparing SAM2 output back to rembg
+                # produces false positives (SAM2 legitimately cleans rembg edges).
+                # SAM2 confidence >= 0.50 is the quality gate in this path.
+                sam2_conf = float(seg_meta.get("sam2_confidence", 0))
+                if sam2_conf >= 0.50:
+                    preservation = VehiclePreservationReport(passed=True)
+                    logger.info("Preservation gate passed (rembg provider, SAM2 conf=%.3f)", sam2_conf)
+                else:
+                    preservation = VehiclePreservationReport(
+                        passed=False,
+                        user_message=REJECTION_MESSAGE,
+                        internal_reasons=[f"SAM2 confidence too low for rembg path: {sam2_conf:.3f} < 0.50"],
+                    )
+            else:
+                preservation = validate_vehicle_preservation(
+                    vertex_mask=seg_meta["vertex_mask"],
+                    sam2_mask=seg_meta["sam2_mask"],
+                    merged_mask=seg_meta["merged_mask"],
+                    final_mask=seg_meta["final_mask"],
+                    vertex_confidence=float(seg_meta["vertex_confidence"]),
+                    sam2_confidence=float(seg_meta["sam2_confidence"]),
+                )
 
             if not preservation.passed:
                 logger.error(
