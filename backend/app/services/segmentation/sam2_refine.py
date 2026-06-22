@@ -8,6 +8,7 @@ import numpy as np
 from PIL import Image
 
 from app.config import settings
+from app.services.segmentation.mask_ops import mask_bbox
 from app.services.segmentation.vertex import VertexSegmentationError
 
 logger = logging.getLogger(__name__)
